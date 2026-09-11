@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Painel de Controle SaaS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen p-4 sm:p-8">
+
+  <div class="max-w-5xl mx-auto space-y-6">
+    
+    <!-- HEADER -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-lg">
+          <i class="fa-solid fa-user-shield"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-white">Painel Administrativo</h1>
+          <p class="text-xs text-slate-400">Gestão Global, Chaves de API e Conciliação</p>
+        </div>
+      </div>
+
+      <a href="/index.html" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl transition">
+        <i class="fa-solid fa-arrow-left"></i> Painel de Busca
+      </a>
+    </div>
+
+    <!-- PAINEL COM ABAS -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+      
+      <!-- NAVEGAÇÃO -->
+      <div class="flex flex-wrap border-b border-slate-800 gap-2 mb-6 pb-2">
+        <button onclick="switchTab('tab-users')" id="btn-tab-users" class="tab-btn active text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <i class="fa-solid fa-users"></i> Usuários & Créditos
+        </button>
+
+        <button onclick="switchTab('tab-api')" id="btn-tab-api" class="tab-btn text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800">
+          <i class="fa-solid fa-key"></i> Configurações de APIs
+        </button>
+
+        <button onclick="switchTab('tab-plans')" id="btn-tab-plans" class="tab-btn text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800">
+          <i class="fa-solid fa-box-open"></i> Planos & Preços
+        </button>
+
+        <button onclick="switchTab('tab-finance')" id="btn-tab-finance" class="tab-btn text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800">
+          <i class="fa-solid fa-file-invoice-dollar"></i> Conciliação Financeira
+        </button>
+      </div>
+
+      <!-- ABA 1: USUÁRIOS E CRÉDITOS (LISTAGEM CRUD) -->
+      <div id="tab-users" class="tab-content space-y-5">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Gestão de Usuários Cadastrados</h2>
+            <p class="text-xs text-slate-400">Listagem de todas as contas registradas e controle de privilégios/créditos.</p>
+          </div>
+          <button onclick="loadUsers()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold py-2 px-3 rounded-xl transition flex items-center gap-2">
+            <i class="fa-solid fa-rotate-right"></i> Atualizar Lista
+          </button>
+        </div>
+
+        <!-- TABELA DE USUÁRIOS -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider">
+              <tr>
+                <th class="p-3.5">E-mail</th>
+                <th class="p-3.5">Papel (Role)</th>
+                <th class="p-3.5">Créditos</th>
+                <th class="p-3.5">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="4" class="p-4 text-center text-slate-500">
+                  <i class="fa-solid fa-spinner fa-spin mr-2"></i>Carregando usuários...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ABA 2: CONFIGURAÇÕES DE APIS -->
+      <div id="tab-api" class="tab-content hidden space-y-5">
+        <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Gerenciamento de Integrações & Chaves</h2>
+        <p class="text-xs text-slate-400">Gerencie as chaves das APIs externas de raspagem e enriquecimento de dados.</p>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">SerpApi Key (Google Search)</label>
+            <input type="password" id="serpApiKey" placeholder="Cole sua SerpApi Key aqui"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Hunter.io API Key (E-mails)</label>
+            <input type="password" id="hunterApiKey" placeholder="Cole sua Hunter.io Key aqui"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition">
+          </div>
+
+          <button onclick="saveApiKeys()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 px-6 rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center gap-2 text-xs">
+            <i class="fa-solid fa-floppy-disk"></i> Salvar Configurações de API
+          </button>
+        </div>
+      </div>
+
+      <!-- ABA 3: PLANOS & PREÇOS -->
+      <div id="tab-plans" class="tab-content hidden space-y-5">
+        <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Configuração de Pacotes do SaaS</h2>
+        <p class="text-xs text-slate-400">Estrutura das ofertas integradas ao checkout automático.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-white text-sm">Plano PRO</span>
+              <span class="text-emerald-400 font-extrabold text-sm">R$ 97/mês</span>
+            </div>
+            <p class="text-xs text-slate-400">1.000 Créditos de busca mensais</p>
+          </div>
+
+          <div class="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-white text-sm">Plano ENTERPRISE</span>
+              <span class="text-emerald-400 font-extrabold text-sm">R$ 247/mês</span>
+            </div>
+            <p class="text-xs text-slate-400">3.500 Créditos de busca mensais</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ABA 4: CONCILIAÇÃO FINANCEIRA -->
+      <div id="tab-finance" class="tab-content hidden space-y-5">
+        <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wider">Histórico de Vendas & PagBank</h2>
+        <p class="text-xs text-slate-400">Relatório de transações aprovadas e boletos/PIX pendentes.</p>
+
+        <div class="p-6 bg-slate-950 border border-slate-800 rounded-xl text-center">
+          <i class="fa-solid fa-chart-line text-2xl text-slate-600 mb-2"></i>
+          <p class="text-xs text-slate-400">Módulo de webhooks do PagBank aguardando integração oficial do servidor.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL DE EDIÇÃO DE USUÁRIO (CRUD) -->
+  <div id="editUserModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-pen-to-square text-amber-400"></i> Editar Usuário
+        </h3>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <form id="editUserForm" onsubmit="handleSaveUser(event)" class="space-y-4">
+        <input type="hidden" id="editDocId">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">E-mail</label>
+          <input type="email" id="editEmail" disabled class="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-400 cursor-not-allowed">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Saldo de Créditos</label>
+            <input type="number" id="editCredits" min="0" required class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 uppercase tracking-wider">Papel (Role)</label>
+            <select id="editRole" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition">
+              <option value="user">Usuário (User)</option>
+              <option value="admin">Administrador (Admin)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-4 border-t border-slate-800">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 rounded-xl border border-slate-800 text-xs font-semibold text-slate-400 hover:text-white transition">
+            Cancelar
+          </button>
+          <button type="submit" id="btnSaveUser" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold px-5 py-2 rounded-xl transition flex items-center gap-2">
+            <i class="fa-solid fa-floppy-disk"></i> Salvar Alterações
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/firebase-config.js"></script>
+  <script>
+    let usersList = [];
+
+    // NAVEGAÇÃO ENTRE ABAS
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
+        btn.classList.add('text-slate-400', 'hover:text-white', 'hover:bg-slate-800');
+      });
+
+      document.getElementById(tabId).classList.remove('hidden');
+      
+      const activeBtn = document.getElementById('btn-' + tabId);
+      activeBtn.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
+      activeBtn.classList.remove('text-slate-400', 'hover:text-white', 'hover:bg-slate-800');
+
+      if (tabId === 'tab-users') {
+        loadUsers();
+      }
+    }
+
+    // CARREGAR LISTA DE USUÁRIOS
+    function loadUsers() {
+      const tbody = document.getElementById('usersTableBody');
+      tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Buscando registros...</td></tr>`;
+
+      const db = firebase.firestore();
+      db.collection('users').get().then((snapshot) => {
+        usersList = [];
+        tbody.innerHTML = '';
+
+        if (snapshot.empty) {
+          tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-500">Nenhum usuário encontrado no banco.</td></tr>`;
+          return;
+        }
+
+        snapshot.forEach((doc) => {
+          const u = doc.data();
+          u.id = doc.id;
+          usersList.push(u);
+
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-900/50 transition';
+          tr.innerHTML = `
+            <td class="p-3.5 font-semibold text-white">${u.email || 'N/A'}</td>
+            <td class="p-3.5">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}">
+                ${u.role || 'user'}
+              </span>
+            </td>
+            <td class="p-3.5 font-bold text-emerald-400">${u.credits ?? 0}</td>
+            <td class="p-3.5 flex items-center gap-2">
+              <button onclick="openEditModal('${u.id}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-400 text-slate-300 transition" title="Editar Usuário">
+                <i class="fa-solid fa-pencil text-xs"></i>
+              </button>
+              <button onclick="deleteUser('${u.id}', '${u.email || 'usuário'}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 transition" title="Excluir Usuário">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }).catch((err) => {
+        console.error("Erro ao carregar usuários:", err);
+        tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-rose-400">Erro ao carregar dados: ${err.message}</td></tr>`;
+      });
+    }
+
+    // ABRIR MODAL
+    function openEditModal(docId) {
+      const user = usersList.find(u => u.id === docId);
+      if (!user) return;
+
+      document.getElementById('editDocId').value = user.id;
+      document.getElementById('editEmail').value = user.email || '';
+      document.getElementById('editCredits').value = user.credits ?? 0;
+      document.getElementById('editRole').value = user.role || 'user';
+
+      document.getElementById('editUserModal').classList.remove('hidden');
+    }
+
+    // FECHAR MODAL
+    function closeEditModal() {
+      document.getElementById('editUserModal').classList.add('hidden');
+    }
+
+    // SALVAR ALTERAÇÕES
+    function handleSaveUser(event) {
+      event.preventDefault();
+
+      const docId = document.getElementById('editDocId').value;
+      const newCredits = parseInt(document.getElementById('editCredits').value, 10);
+      const newRole = document.getElementById('editRole').value;
+      const btn = document.getElementById('btnSaveUser');
+
+      if (!docId || isNaN(newCredits)) return;
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Salvando...`;
+
+      const db = firebase.firestore();
+      db.collection('users').doc(docId).update({
+        credits: newCredits,
+        role: newRole,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        closeEditModal();
+        loadUsers();
+      }).catch((err) => {
+        alert("Erro ao atualizar: " + err.message);
+      }).finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Salvar Alterações`;
+      });
+    }
+
+    // EXCLUIR USUÁRIO (DELETE)
+    function deleteUser(docId, email) {
+      if (confirm(`Tem certeza que deseja excluir o usuário "${email}"? Esta ação não pode ser desfeita.`)) {
+        const db = firebase.firestore();
+        db.collection('users').doc(docId).delete().then(() => {
+          loadUsers();
+        }).catch((err) => {
+          alert("Erro ao excluir usuário: " + err.message);
+        });
+      }
+    }
+
+    function saveApiKeys() {
+      alert("Configurações salvas no ambiente local do servidor.");
+    }
+
+    // CARREGA A LISTA INICIAL
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) {
+        loadUsers();
+      } else {
+        window.location.href = '/landing.html';
+      }
+    });
+  </script>
+</body>
+</html>

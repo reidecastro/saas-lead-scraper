@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeadScraperB2B - Painel de Busca</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#10b981',
+              600: '#059669',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-slate-950 min-h-screen flex flex-col">
+
+  <!-- NAVBAR -->
+  <nav class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-lg shadow-lg shadow-emerald-500/20">
+          <i class="fa-solid fa-bullseye"></i>
+        </div>
+        <span class="text-lg font-bold tracking-tight text-white">LeadScraper<span class="text-emerald-400">B2B</span></span>
+      </div>
+
+      <div class="flex items-center gap-3 sm:gap-4">
+        <!-- Botão Admin com Cache Busting ?v=2 -->
+        <a href="/admin.html?v=2" id="adminLink" class="hidden text-xs font-semibold text-amber-400 hover:text-amber-300 transition px-3 py-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 flex items-center gap-1.5">
+          <i class="fa-solid fa-user-shield"></i> Admin
+        </a>
+
+        <!-- Badge de Créditos -->
+        <div class="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-medium">
+          <i class="fa-solid fa-coins text-amber-400"></i>
+          <span class="text-slate-400 hidden sm:inline">Créditos:</span>
+          <span id="userCredits" class="text-emerald-400 font-bold">--</span>
+        </div>
+
+        <!-- Identificação do Usuário -->
+        <span id="userEmail" class="text-xs text-slate-400 hidden md:inline-block">---</span>
+
+        <!-- Botão Sair -->
+        <button id="btnLogout" onclick="logoutUser()" class="hidden text-xs font-semibold text-rose-400 hover:text-rose-300 transition px-3 py-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 flex items-center gap-1.5">
+          <i class="fa-solid fa-right-from-bracket"></i> Sair
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ÁREA PRINCIPAL -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl mb-8">
+      <h2 class="text-xl font-bold text-white mb-2">Extrair Novos Leads</h2>
+      <p class="text-sm text-slate-400 mb-6">Informe o segmento, limite de resultados e marque os filtros de enriquecimento desejados.</p>
+
+      <form id="scrapeForm" onsubmit="handleScrape(event)" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Termo ou Segmento</label>
+            <input type="text" id="searchTerm" placeholder="Ex: Academias Campinas-SP Bairro Cambuí" required
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Quantidade de Leads</label>
+            <select id="searchLimit" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition">
+              <option value="5">5 Leads (5 Créditos)</option>
+              <option value="10" selected>10 Leads (10 Créditos)</option>
+              <option value="20">20 Leads (20 Créditos)</option>
+              <option value="50">50 Leads (50 Créditos)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="border-t border-slate-800 pt-4">
+          <label class="block text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">Opções de Enriquecimento</label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer hover:border-slate-700 transition">
+              <input type="checkbox" id="checkPhone" checked class="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+              <span class="text-xs text-slate-300 font-medium">Validar Telefone / WhatsApp</span>
+            </label>
+
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer hover:border-slate-700 transition">
+              <input type="checkbox" id="checkEmail" checked class="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+              <span class="text-xs text-slate-300 font-medium">Raspar E-mail via Website</span>
+            </label>
+
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer hover:border-slate-700 transition">
+              <input type="checkbox" id="checkSocial" checked class="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-slate-700">
+              <span class="text-xs text-slate-300 font-medium">Buscar Redes Sociais</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button type="submit" id="btnSubmit" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-magnifying-glass"></i> Buscar Leads
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- RESULTADOS & TABELA DE LEADS -->
+    <div id="resultsSection" class="hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-white">Leads Encontrados</h3>
+        <button onclick="downloadExcel()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 text-xs font-bold py-2 px-4 rounded-xl transition flex items-center gap-2">
+          <i class="fa-solid fa-file-excel"></i> Baixar Planilha Excel
+        </button>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-x-auto shadow-xl">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-950/50 text-slate-400 border-b border-slate-800 uppercase tracking-wider">
+            <tr>
+              <th class="p-4">Empresa</th>
+              <th class="p-4">Telefone</th>
+              <th class="p-4">E-mail</th>
+              <th class="p-4">Rede Social</th>
+              <th class="p-4">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="leadsTableBody" class="divide-y divide-slate-800/60"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/firebase-config.js"></script>
+
+  <script>
+    let currentLeads = [];
+    let currentTerm = "";
+
+    firebase.auth().onAuthStateChanged((user) => {
+      const btnLogout = document.getElementById('btnLogout');
+      const userEmail = document.getElementById('userEmail');
+      const adminLink = document.getElementById('adminLink');
+
+      if (user) {
+        if (btnLogout) btnLogout.classList.remove('hidden');
+        if (userEmail) userEmail.textContent = user.email;
+
+        if (user.email === 'reidecastro@gmail.com' && adminLink) {
+          adminLink.classList.remove('hidden');
+        }
+
+        const db = firebase.firestore();
+        const userRef = db.collection('users').doc(user.uid);
+
+        userRef.get().then((doc) => {
+          if (doc.exists) {
+            document.getElementById('userCredits').textContent = doc.data().credits ?? 0;
+            userRef.onSnapshot((updatedDoc) => {
+              if (updatedDoc.exists) {
+                document.getElementById('userCredits').textContent = updatedDoc.data().credits ?? 0;
+              }
+            });
+          } else {
+            const initialData = {
+              email: user.email,
+              credits: 20,
+              role: user.email === 'reidecastro@gmail.com' ? 'admin' : 'user',
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            userRef.set(initialData).then(() => {
+              document.getElementById('userCredits').textContent = 20;
+              userRef.onSnapshot((updatedDoc) => {
+                if (updatedDoc.exists) {
+                  document.getElementById('userCredits').textContent = updatedDoc.data().credits ?? 0;
+                }
+              });
+            });
+          }
+        });
+
+      } else {
+        window.location.href = '/landing.html';
+      }
+    });
+
+    function logoutUser() {
+      firebase.auth().signOut().then(() => {
+        window.location.href = '/landing.html';
+      });
+    }
+
+    async function handleScrape(event) {
+      event.preventDefault();
+      const user = firebase.auth().currentUser;
+      if (!user) return alert("Você precisa estar logado!");
+
+      const term = document.getElementById('searchTerm').value;
+      const limit = parseInt(document.getElementById('searchLimit').value, 10);
+      const btn = document.getElementById('btnSubmit');
+
+      const enrichOptions = {
+        checkPhone: document.getElementById('checkPhone').checked,
+        checkEmail: document.getElementById('checkEmail').checked,
+        checkSocial: document.getElementById('checkSocial').checked,
+      };
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Extraindo...`;
+
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/scrape', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ term, limit, enrichOptions })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          currentLeads = result.data;
+          currentTerm = term;
+          renderTable(result.data);
+        } else {
+          alert("Erro: " + (result.error || "Falha na extração dos leads."));
+        }
+      } catch (err) {
+        alert("Erro na requisição: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-magnifying-glass"></i> Buscar Leads`;
+      }
+    }
+
+    function renderTable(leads) {
+      const tbody = document.getElementById('leadsTableBody');
+      const container = document.getElementById('resultsSection');
+      tbody.innerHTML = '';
+
+      if (!leads || leads.length === 0) {
+        alert("Nenhum lead encontrado para este termo.");
+        container.classList.add('hidden');
+        return;
+      }
+
+      leads.forEach(lead => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition';
+        tr.innerHTML = `
+          <td class="p-4 font-semibold text-white">${lead.nome}</td>
+          <td class="p-4">${lead.telefone || 'N/A'}</td>
+          <td class="p-4">${lead.email || 'N/A'}</td>
+          <td class="p-4">${lead.redes_sociais && lead.redes_sociais !== 'N/A' ? `<a href="${lead.redes_sociais}" target="_blank" class="text-emerald-400 hover:underline">Acessar</a>` : 'N/A'}</td>
+          <td class="p-4">
+            ${lead.whatsapp ? `<a href="${lead.whatsapp}" target="_blank" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-1 rounded font-semibold text-[11px] hover:bg-emerald-500 hover:text-slate-950 transition"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>` : '-'}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      container.classList.remove('hidden');
+    }
+
+    async function downloadExcel() {
+      if (!currentLeads.length) return;
+      const user = firebase.auth().currentUser;
+      if (!user) return;
+
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/download/excel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ leads: currentLeads, term: currentTerm })
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `leads-${currentTerm.replace(/[^a-z0-9]/gi, '_')}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } else {
+          alert("Erro ao baixar a planilha.");
+        }
+      } catch (err) {
+        alert("Falha no download: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

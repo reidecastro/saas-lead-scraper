@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeadScraperB2B - Prospecção Inteligente de Leads</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased font-sans selection:bg-emerald-500 selection:text-slate-950">
+
+  <!-- NAVBAR -->
+  <nav class="fixed top-0 w-full z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-emerald-500/20">
+          <i class="fa-solid fa-bullseye"></i>
+        </div>
+        <span class="text-xl font-bold tracking-tight text-white">LeadScraper<span class="text-emerald-400">B2B</span></span>
+      </div>
+      <div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
+        <a href="#recursos" class="hover:text-emerald-400 transition">Recursos</a>
+        <a href="#precos" class="hover:text-emerald-400 transition">Planos</a>
+      </div>
+      <div class="flex items-center gap-4">
+        <button onclick="loginWithGoogle()" class="text-sm font-semibold text-slate-300 hover:text-white transition px-4 py-2">
+          Entrar
+        </button>
+        <button onclick="loginWithGoogle()" class="text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-5 py-2.5 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center gap-2">
+          <i class="fa-brands fa-google"></i> Criar Conta / Entrar
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO SECTION -->
+  <section class="pt-36 pb-24 relative overflow-hidden">
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.15),transparent_50%)]"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+      <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-6">
+        <i class="fa-solid fa-bolt"></i> Extração em Tempo Real
+      </span>
+      <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-white mb-6 leading-tight">
+        Encontre centenas de <span class="text-emerald-400">Leads B2B qualificados</span> em segundos.
+      </h1>
+      <p class="text-lg md:text-xl text-slate-400 max-w-3xl mx-auto mb-10">
+        Raspe contatos do Google Places, valide e-mails e exporte planilhas gerenciais prontas para prospecção no WhatsApp.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <button onclick="loginWithGoogle()" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-8 py-4 rounded-xl transition shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-3">
+          Testar Grátis com 20 Créditos <i class="fa-solid fa-arrow-right"></i>
+        </button>
+        <a href="#precos" class="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold px-8 py-4 rounded-xl border border-slate-800 transition flex items-center justify-center gap-2">
+          Ver Planos
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLANOS E PREÇOS -->
+  <section id="precos" class="py-24 bg-slate-900/50 border-t border-slate-800/80">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-3xl font-bold text-white mb-4">Escolha o plano ideal para sua operação</h2>
+        <p class="text-slate-400">Adquira franquias de créditos mensais com pagamento seguro via PagBank.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+        
+        <!-- PLANO FREE -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 flex flex-col justify-between">
+          <div>
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Gratuito</span>
+            <h3 class="text-2xl font-bold text-white mt-2">Plano Teste</h3>
+            <div class="mt-4 mb-6">
+              <span class="text-4xl font-extrabold text-white">R$ 0</span>
+              <span class="text-slate-400">/único</span>
+            </div>
+            <ul class="space-y-4 text-sm text-slate-300 mb-8">
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> 20 Créditos de teste inicial</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Busca no Google Places</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Exportação para Excel nativa</li>
+            </ul>
+          </div>
+          <button onclick="loginWithGoogle()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition border border-slate-700">
+            Começar Grátis
+          </button>
+        </div>
+
+        <!-- PLANO PRO -->
+        <div class="bg-slate-900 border-2 border-emerald-500 rounded-2xl p-8 flex flex-col justify-between relative shadow-2xl shadow-emerald-500/10">
+          <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-emerald-500 text-slate-950 text-xs font-extrabold uppercase px-3 py-1 rounded-full">
+            Mais Popular
+          </div>
+          <div>
+            <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Profissional</span>
+            <h3 class="text-2xl font-bold text-white mt-2">Plano Pro</h3>
+            <div class="mt-4 mb-6">
+              <span class="text-4xl font-extrabold text-white">R$ 97</span>
+              <span class="text-slate-400">/mês</span>
+            </div>
+            <ul class="space-y-4 text-sm text-slate-300 mb-8">
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> <strong>1.000 Créditos</strong> por mês</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Enriquecimento de E-mails & Redes</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Formatação com Link WhatsApp</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Planilha com Kanban e Status</li>
+            </ul>
+          </div>
+          <div>
+            <a href="https://pag.ae/8291RZKB2/button" target="_blank" class="block w-full text-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 rounded-xl transition shadow-lg shadow-emerald-500/20">
+              Assinar Plano Pro (R$ 97)
+            </a>
+            <p class="text-[11px] text-slate-500 text-center mt-2">Use o mesmo e-mail do seu cadastro no checkout PagBank.</p>
+          </div>
+        </div>
+
+        <!-- PLANO ENTERPRISE -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 flex flex-col justify-between">
+          <div>
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Escala</span>
+            <h3 class="text-2xl font-bold text-white mt-2">Enterprise</h3>
+            <div class="mt-4 mb-6">
+              <span class="text-4xl font-extrabold text-white">R$ 247</span>
+              <span class="text-slate-400">/mês</span>
+            </div>
+            <ul class="space-y-4 text-sm text-slate-300 mb-8">
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> <strong>3.500 Créditos</strong> por mês</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Todas as funções do Plano Pro</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Maior velocidade de raspagem</li>
+              <li class="flex items-center gap-3"><i class="fa-solid fa-check text-emerald-400"></i> Suporte prioritário via WhatsApp</li>
+            </ul>
+          </div>
+          <div>
+            <a href="https://pag.ae/8291TPc12/button" target="_blank" class="block w-full text-center bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl transition border border-slate-700">
+              Assinar Enterprise (R$ 247)
+            </a>
+            <p class="text-[11px] text-slate-500 text-center mt-2">Use o mesmo e-mail do seu cadastro no checkout PagBank.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="bg-slate-950 border-t border-slate-800 py-8 text-center text-xs text-slate-500">
+    <p>&copy; 2026 LeadScraperB2B. Todos os direitos reservados.</p>
+  </footer>
+
+  <!-- SCRIPT DE AUTENTICAÇÃO COM GOOGLE -->
+  <script src="/firebase-config.js"></script>
+  <script>
+    // Se o usuário já estiver logado, redireciona direto pro painel
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) {
+        window.location.href = '/index.html';
+      }
+    });
+
+    // Função para autenticar com Google via Pop-up
+    function loginWithGoogle() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      firebase.auth().signInWithPopup(provider)
+        .then((result) => {
+          // Cria o documento do usuário no Firestore se for o primeiro acesso
+          const user = result.user;
+          const db = firebase.firestore();
+          
+          db.collection('users').doc(user.uid).get().then((doc) => {
+            if (!doc.exists) {
+              db.collection('users').doc(user.uid).set({
+                email: user.email,
+                credits: 20,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+              });
+            }
+            window.location.href = '/index.html';
+          });
+        })
+        .catch((error) => {
+          console.error("Erro na autenticação:", error);
+          alert("Falha ao entrar com Google: " + error.message);
+        });
+    }
+  </script>
+</body>
+</html>

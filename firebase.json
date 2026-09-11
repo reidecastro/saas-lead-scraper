@@ -1,0 +1,24 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/credits",
+        "destination": "https://saas-lead-scraper.vercel.app/api/credits"
+      },
+      {
+        "source": "/api/scrape",
+        "destination": "https://saas-lead-scraper.vercel.app/api/scrape"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
