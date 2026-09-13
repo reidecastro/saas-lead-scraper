@@ -54,7 +54,7 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Formatação de telefone e link de WhatsApp
+// Limpeza e formatação de telefone
 function cleanAndFormatPhone(phoneStr) {
   if (!phoneStr) return { phone: '', whatsapp: '' };
   const digits = String(phoneStr).replace(/\D/g, '');
@@ -63,7 +63,60 @@ function cleanAndFormatPhone(phoneStr) {
     cleanDigits = cleanDigits.substring(2);
   }
   const whatsapp = (cleanDigits.length === 10 || cleanDigits.length === 11) ? `https://wa.me/55${cleanDigits}` : '';
-  return { phone: phoneStr, whatsapp };
+  return { phone: String(phoneStr), whatsapp };
+}
+
+// Busca fallback na Serper Organic para pegar telefone, e-mail e rede social
+async function fallbackSearch(companyName, address, serperApiKey) {
+  let phone = '', email = '', social = '';
+  try {
+    const query = `${companyName} ${address} telefone contato email`;
+    const res = await axios.post(
+      'https://google.serper.dev/search',
+      { q: query, gl: 'br', hl: 'pt-br', num: 3 },
+      { headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' }, timeout: 4000 }
+    );
+
+    const organic = res.data.organic || [];
+    let textBlock = '';
+
+    organic.forEach(item => {
+      const title = item.title || '';
+      const snippet = item.snippet || '';
+      const link = item.link || '';
+
+      textBlock += ` ${title} ${snippet}`;
+
+      if ((link.includes('instagram.com') || link.includes('facebook.com')) && !social) {
+        social = link;
+      }
+    });
+
+    // Procura padrão de telefone
+    const phoneMatches = textBlock.match(/(?:\(?\d{2}\)?\s*)?(?:9?\d{4}[-\s]?\d{4})/g);
+    if (phoneMatches) {
+      for (const match of phoneMatches) {
+        const cleanM = match.replace(/\D/g, '');
+        if (cleanM.length === 10 || cleanM.length === 11) {
+          phone = match;
+          break;
+        }
+      }
+    }
+
+    // Procura padrão de e-mail
+    const emailMatches = textBlock.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+    if (emailMatches) {
+      const validEmails = emailMatches.filter(e => !e.match(/\.(png|jpg|jpeg|webp|js|css|svg)$/i));
+      if (validEmails.length > 0) {
+        email = validEmails[0];
+      }
+    }
+  } catch (e) {
+    // Ignora erros no fallback
+  }
+
+  return { phone, email, social };
 }
 
 // Extração de CNPJ e Sócios via BrasilAPI
@@ -73,7 +126,8 @@ async function fetchCnpjAndPartners(companyName, address, serperApiKey) {
     const locationHint = address ? address.split('-')[0].trim() : '';
     const query = `${companyName} ${locationHint} cnpj brasilapi`;
     
-    const res = await axios.post('https://google.serper.dev/search', 
+    const res = await axios.post(
+      'https://google.serper.dev/search', 
       { q: query, gl: 'br', hl: 'pt-br', num: 3 },
       { headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' }, timeout: 4000 }
     );
@@ -96,18 +150,14 @@ async function fetchCnpjAndPartners(companyName, address, serperApiKey) {
             const sociosList = qsa.map(s => s.qualificacao_socio ? `${s.nome_socio} (${s.qualificacao_socio})` : s.nome_socio);
             socios = sociosList.join(', ');
           }
-        } catch (e) {
-          // Ignora se BrasilAPI falhar
-        }
+        } catch (e) {}
       }
     }
-  } catch (err) {
-    // Ignora falhas de enriquecimento de CNPJ
-  }
+  } catch (err) {}
   return { cnpj, razaoSocial, socios: socios || 'Não identificado' };
 }
 
-// Rota Principal de Raspagem integrando Serper.dev
+// Rota Principal de Raspagem
 app.post('/api/scrape', authenticateToken, async (req, res) => {
   try {
     const query = req.body.query || req.body.searchTerm || req.body.term || req.body.segmento;
@@ -118,7 +168,6 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'O termo de busca é obrigatório.' });
     }
 
-    // Chamada à API da Serper Places
     const serperResponse = await axios.post(
       'https://google.serper.dev/places',
       { q: query, gl: 'br', hl: 'pt-br' },
@@ -132,7 +181,7 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
       const item = places[i];
       const companyName = item.title || '';
       const address = item.address || item.formattedAddress || item.vicinity || '';
-      const phoneRaw = item.phoneNumber || item.phone || '';
+      let phoneRaw = item.phoneNumber || item.phone || '';
       const category = item.category || 'Comércio Local / Empresa';
       const rating = item.rating || '';
       const ratingCount = item.ratingCount || '';
@@ -140,16 +189,46 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
       const lat = item.latitude;
       const lng = item.longitude;
 
-      const gmapsLink = (lat && lng) 
-        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
-        : `https://www.google.com/maps/search/${encodeURIComponent(companyName + ' ' + address)}`;
+      let email = '';
+      let social = '';
+
+      // Executa busca fallback para recuperar telefone, email e redes faltantes
+      const fallbackData = await fallbackSearch(companyName, address, serperApiKey);
+      if (!phoneRaw && fallbackData.phone) phoneRaw = fallbackData.phone;
+      if (fallbackData.email) email = fallbackData.email;
+      if (fallbackData.social) social = fallbackData.social;
 
       const { phone, whatsapp } = cleanAndFormatPhone(phoneRaw);
       const { cnpj, razaoSocial, socios } = await fetchCnpjAndPartners(companyName, address, serperApiKey);
 
-      // Objeto padronizado com TODAS as variações de chaves esperadas (Frontend + Excel)
+      const gmapsLink = (lat && lng) 
+        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+        : `https://www.google.com/maps/search/${encodeURIComponent(companyName + ' ' + address)}`;
+
+      // Objeto com TODAS as combinações de chaves possíveis para garantir que o frontend leia sem "N/A"
       const leadObj = {
-        // Nomes de colunas idênticos ao app.py
+        // Chaves da interface web (HTML/JS)
+        id: String(i + 1),
+        empresa: companyName,
+        nome: companyName,
+        name: companyName,
+        telefone: phone || 'N/A',
+        phone: phone || 'N/A',
+        whatsapp: whatsapp,
+        email: email || 'N/A',
+        mail: email || 'N/A',
+        website: websiteUrl,
+        site: websiteUrl,
+        rede_social: social || (websiteUrl ? websiteUrl : 'N/A'),
+        redes_sociais: social || (websiteUrl ? websiteUrl : 'N/A'),
+        social: social || (websiteUrl ? websiteUrl : 'N/A'),
+        instagram: social,
+        endereco: address,
+        address: address,
+        rating: rating,
+        reviews: ratingCount,
+
+        // Chaves idênticas à planilha Excel do app.py
         "Prompt": query,
         "Nome da Empresa": companyName,
         "Razão Social": razaoSocial,
@@ -159,35 +238,15 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
         "Endereço": address,
         "Telefone": phone,
         "Whatsapp": whatsapp,
-        "Email": "",
-        "Redes Sociais": "",
+        "Email": email,
+        "Redes Sociais": social,
         "Nota Google": rating,
         "Total Avaliações": ratingCount,
         "Status": "A Fazer",
         "Progressão": "1º Contato",
         "Tem Website": websiteUrl ? "Sim" : "Não",
         "Link Google Maps": gmapsLink,
-        "Observações": websiteUrl ? `Site: ${websiteUrl}` : "Sem site oficial",
-
-        // Compatibilidade de chaves em inglês/minúsculas para a tabela do frontend JS
-        id: String(i + 1),
-        empresa: companyName,
-        nome: companyName,
-        name: companyName,
-        telefone: phone,
-        phone: phone,
-        whatsapp: whatsapp,
-        email: "",
-        website: websiteUrl,
-        site: websiteUrl,
-        endereco: address,
-        address: address,
-        rede_social: "",
-        redes_sociais: "",
-        instagram: "",
-        rating: rating,
-        reviews: ratingCount,
-        gmaps_link: gmapsLink
+        "Observações": websiteUrl ? `Site: ${websiteUrl}` : "Sem site oficial"
       };
 
       leadsList.push(leadObj);
@@ -205,13 +264,13 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao realizar scraping via Serper:', error.message);
-    return res.status(500).json({ error: 'Falha ao buscar leads na API Serper. Verifique a chave e tente novamente.' });
+    return res.status(500).json({ error: 'Falha ao buscar leads na API Serper.' });
   }
 });
 
 // Rota Health Check
 app.get('/', (req, res) => {
-  res.send('API SaaS Lead Scraper ativa e operando com Serper.dev.');
+  res.send('API SaaS Lead Scraper ativa e operando.');
 });
 
 // Porta Local / Serverless
