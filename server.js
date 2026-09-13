@@ -3,13 +3,16 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const admin = require('firebase-admin');
+const ExcelJS = require('exceljs');
 
 const app = express();
 
 app.use(cors({ origin: true }));
 app.use(express.json());
 
-// Inicialização do Firebase Admin SDK
+// ==============================================================================
+// 1. INICIALIZAÇÃO DO FIREBASE ADMIN SDK
+// ==============================================================================
 try {
   let serviceAccount;
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -54,7 +57,11 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Limpeza e formatação de telefone
+// ==============================================================================
+// 2. FUNÇÕES AUXILIARES DE ENRIQUECIMENTO DE DADOS
+// ==============================================================================
+
+// Limpeza e formatação de telefone e link de WhatsApp
 function cleanAndFormatPhone(phoneStr) {
   if (!phoneStr) return { phone: '', whatsapp: '' };
   const digits = String(phoneStr).replace(/\D/g, '');
@@ -66,7 +73,7 @@ function cleanAndFormatPhone(phoneStr) {
   return { phone: String(phoneStr), whatsapp };
 }
 
-// Busca fallback na Serper Organic para pegar telefone, e-mail e rede social
+// Busca fallback na Serper Organic para recuperar telefone, e-mail e redes faltantes
 async function fallbackSearch(companyName, address, serperApiKey) {
   let phone = '', email = '', social = '';
   try {
@@ -92,7 +99,6 @@ async function fallbackSearch(companyName, address, serperApiKey) {
       }
     });
 
-    // Procura padrão de telefone
     const phoneMatches = textBlock.match(/(?:\(?\d{2}\)?\s*)?(?:9?\d{4}[-\s]?\d{4})/g);
     if (phoneMatches) {
       for (const match of phoneMatches) {
@@ -104,7 +110,6 @@ async function fallbackSearch(companyName, address, serperApiKey) {
       }
     }
 
-    // Procura padrão de e-mail
     const emailMatches = textBlock.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
     if (emailMatches) {
       const validEmails = emailMatches.filter(e => !e.match(/\.(png|jpg|jpeg|webp|js|css|svg)$/i));
@@ -113,7 +118,7 @@ async function fallbackSearch(companyName, address, serperApiKey) {
       }
     }
   } catch (e) {
-    // Ignora erros no fallback
+    // Ignora erros silenciosos no fallback
   }
 
   return { phone, email, social };
@@ -157,7 +162,11 @@ async function fetchCnpjAndPartners(companyName, address, serperApiKey) {
   return { cnpj, razaoSocial, socios: socios || 'Não identificado' };
 }
 
-// Rota Principal de Raspagem
+// ==============================================================================
+// 3. ROTAS DA API
+// ==============================================================================
+
+// Rota Principal de Raspagem integrando Serper.dev
 app.post('/api/scrape', authenticateToken, async (req, res) => {
   try {
     const query = req.body.query || req.body.searchTerm || req.body.term || req.body.segmento;
@@ -192,7 +201,6 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
       let email = '';
       let social = '';
 
-      // Executa busca fallback para recuperar telefone, email e redes faltantes
       const fallbackData = await fallbackSearch(companyName, address, serperApiKey);
       if (!phoneRaw && fallbackData.phone) phoneRaw = fallbackData.phone;
       if (fallbackData.email) email = fallbackData.email;
@@ -205,9 +213,8 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
         ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
         : `https://www.google.com/maps/search/${encodeURIComponent(companyName + ' ' + address)}`;
 
-      // Objeto com TODAS as combinações de chaves possíveis para garantir que o frontend leia sem "N/A"
       const leadObj = {
-        // Chaves da interface web (HTML/JS)
+        // Compatibilidade com a tabela HTML/JS do frontend
         id: String(i + 1),
         empresa: companyName,
         nome: companyName,
@@ -228,7 +235,7 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
         rating: rating,
         reviews: ratingCount,
 
-        // Chaves idênticas à planilha Excel do app.py
+        // Compatibilidade exata com as colunas da planilha Python (openpyxl)
         "Prompt": query,
         "Nome da Empresa": companyName,
         "Razão Social": razaoSocial,
@@ -268,12 +275,140 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
   }
 });
 
+// Rota Nativa para Exportar Excel (.xlsx) Estilizado
+app.post('/api/export-excel', async (req, res) => {
+  try {
+    const leads = req.body.leads || [];
+
+    if (!Array.isArray(leads) || leads.length === 0) {
+      return res.status(400).json({ error: 'Nenhum lead fornecido para exportação.' });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Leads B2B', {
+      views: [{ showGridLines: true }]
+    });
+
+    const columns = [
+      { header: 'Prompt', key: 'Prompt', width: 30 },
+      { header: 'Nome da Empresa', key: 'Nome da Empresa', width: 30 },
+      { header: 'Razão Social', key: 'Razão Social', width: 30 },
+      { header: 'CNPJ', key: 'CNPJ', width: 20 },
+      { header: 'Sócios / Decisores', key: 'Sócios / Decisores', width: 35 },
+      { header: 'Categoria', key: 'Categoria', width: 25 },
+      { header: 'Endereço', key: 'Endereço', width: 40 },
+      { header: 'Telefone', key: 'Telefone', width: 18 },
+      { header: 'Whatsapp', key: 'Whatsapp', width: 18 },
+      { header: 'Email', key: 'Email', width: 30 },
+      { header: 'Redes Sociais', key: 'Redes Sociais', width: 30 },
+      { header: 'Nota Google', key: 'Nota Google', width: 15 },
+      { header: 'Total Avaliações', key: 'Total Avaliações', width: 15 },
+      { header: 'Status', key: 'Status', width: 15 },
+      { header: 'Progressão', key: 'Progressão', width: 18 },
+      { header: 'Tem Website', key: 'Tem Website', width: 15 },
+      { header: 'Link Google Maps', key: 'Link Google Maps', width: 25 },
+      { header: 'Observações', key: 'Observações', width: 30 }
+    ];
+
+    worksheet.columns = columns;
+
+    // Estilização do Cabeçalho Azul escuro
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 26;
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '1F4E79' }
+      };
+      cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFF' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    // Adição de Linhas de Dados com Alternância de Cores (Zebra)
+    leads.forEach((lead, index) => {
+      const isZebra = index % 2 === 1;
+
+      const rowValues = {
+        'Prompt': lead['Prompt'] || lead.query || '',
+        'Nome da Empresa': lead['Nome da Empresa'] || lead.empresa || lead.nome || '',
+        'Razão Social': lead['Razão Social'] || lead.razaoSocial || '',
+        'CNPJ': lead['CNPJ'] || lead.cnpj || '',
+        'Sócios / Decisores': lead['Sócios / Decisores'] || lead.socios || 'Não identificado',
+        'Categoria': lead['Categoria'] || lead.categoria || '',
+        'Endereço': lead['Endereço'] || lead.endereco || '',
+        'Telefone': lead['Telefone'] || lead.telefone || '',
+        'Whatsapp': lead['Whatsapp'] || lead.whatsapp || '',
+        'Email': lead['Email'] || lead.email || '',
+        'Redes Sociais': lead['Redes Sociais'] || lead.rede_social || '',
+        'Nota Google': lead['Nota Google'] || lead.rating || '',
+        'Total Avaliações': lead['Total Avaliações'] || lead.reviews || '',
+        'Status': lead['Status'] || 'A Fazer',
+        'Progressão': lead['Progressão'] || '1º Contato',
+        'Tem Website': lead['Tem Website'] || (lead.website ? 'Sim' : 'Não'),
+        'Link Google Maps': lead['Link Google Maps'] || lead.gmaps_link || '',
+        'Observações': lead['Observações'] || (lead.website ? `Site: ${lead.website}` : 'Sem site oficial')
+      };
+
+      const row = worksheet.addRow(rowValues);
+      row.height = 20;
+
+      row.eachCell((cell, colNumber) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isZebra ? 'F2F5F9' : 'FFFFFF' }
+        };
+        cell.font = { name: 'Calibri', size: 10, color: { argb: '000000' } };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'D9D9D9' } },
+          left: { style: 'thin', color: { argb: 'D9D9D9' } },
+          bottom: { style: 'thin', color: { argb: 'D9D9D9' } },
+          right: { style: 'thin', color: { argb: 'D9D9D9' } }
+        };
+
+        const colKey = columns[colNumber - 1].key;
+        const valStr = String(cell.value || '');
+
+        if ((colKey === 'Whatsapp' || colKey === 'Link Google Maps' || colKey === 'Redes Sociais') && valStr.startsWith('http')) {
+          let label = 'Acessar Link';
+          if (colKey === 'Whatsapp') label = 'Abrir WhatsApp';
+          if (colKey === 'Link Google Maps') label = 'Ver no Google Maps';
+          if (colKey === 'Redes Sociais') label = 'Acessar Perfil';
+
+          cell.value = { text: label, hyperlink: valStr };
+          cell.font = { name: 'Calibri', size: 10, color: { argb: '0563C1' }, underline: true };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else if (['Nota Google', 'Total Avaliações', 'Status', 'Progressão', 'Tem Website', 'CNPJ'].includes(colKey)) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        } else {
+          cell.alignment = { horizontal: 'left', vertical: 'middle' };
+        }
+      });
+    });
+
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="leads_extraidos.xlsx"');
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error) {
+    console.error('Erro ao gerar Excel:', error.message);
+    return res.status(500).json({ error: 'Erro interno ao gerar a planilha Excel.' });
+  }
+});
+
 // Rota Health Check
 app.get('/', (req, res) => {
   res.send('API SaaS Lead Scraper ativa e operando.');
 });
 
-// Porta Local / Serverless
+// ==============================================================================
+// 4. INICIALIZAÇÃO DO SERVIDOR
+// ==============================================================================
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {

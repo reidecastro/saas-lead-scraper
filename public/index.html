@@ -223,7 +223,7 @@
 
       try {
         const token = await user.getIdToken();
-        const response = await fetch('/api/scrape', {
+        const response = await fetch('https://saas-lead-scraper-asa4.vercel.app/api/scrape', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
