@@ -2,20 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const cheerio = require('cheerio');
-const ExcelJS = require('exceljs');
 const admin = require('firebase-admin');
 
 const app = express();
 
-// Middlewares
 app.use(cors({ origin: true }));
 app.use(express.json());
 
 // Inicialização do Firebase Admin SDK
 try {
   let serviceAccount;
-
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     serviceAccount = typeof process.env.FIREBASE_SERVICE_ACCOUNT === 'string'
       ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
@@ -23,7 +19,6 @@ try {
   }
 
   if (serviceAccount && serviceAccount.private_key) {
-    // Trata quebras de linha enviadas como string na Vercel
     serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
   }
 
@@ -40,7 +35,7 @@ try {
   console.error('Erro ao inicializar Firebase Admin:', error.message);
 }
 
-// Middleware de Autenticação
+// Middleware de Autenticação Token Firebase
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -59,37 +54,144 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Rota Principal de Raspagem de Leads
+// Formatação de telefone e link de WhatsApp
+function cleanAndFormatPhone(phoneStr) {
+  if (!phoneStr) return { phone: '', whatsapp: '' };
+  const digits = String(phoneStr).replace(/\D/g, '');
+  let cleanDigits = digits;
+  if (cleanDigits.length > 11 && cleanDigits.startsWith('55')) {
+    cleanDigits = cleanDigits.substring(2);
+  }
+  const whatsapp = (cleanDigits.length === 10 || cleanDigits.length === 11) ? `https://wa.me/55${cleanDigits}` : '';
+  return { phone: phoneStr, whatsapp };
+}
+
+// Extração de CNPJ e Sócios via BrasilAPI
+async function fetchCnpjAndPartners(companyName, address, serperApiKey) {
+  let cnpj = '', razaoSocial = '', socios = '';
+  try {
+    const locationHint = address ? address.split('-')[0].trim() : '';
+    const query = `${companyName} ${locationHint} cnpj brasilapi`;
+    
+    const res = await axios.post('https://google.serper.dev/search', 
+      { q: query, gl: 'br', hl: 'pt-br', num: 3 },
+      { headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' }, timeout: 4000 }
+    );
+
+    const organic = res.data.organic || [];
+    let textBlock = '';
+    organic.forEach(item => { textBlock += ` ${item.snippet || ''} ${item.title || ''}`; });
+
+    const cnpjMatches = textBlock.match(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g);
+    if (cnpjMatches && cnpjMatches.length > 0) {
+      const cnpjClean = cnpjMatches[0].replace(/\D/g, '');
+      if (cnpjClean.length === 14) {
+        cnpj = `${cnpjClean.substring(0,2)}.${cnpjClean.substring(2,5)}.${cnpjClean.substring(5,8)}/${cnpjClean.substring(8,12)}-${cnpjClean.substring(12)}`;
+        
+        try {
+          const brasilApiRes = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpjClean}`, { timeout: 4000 });
+          if (brasilApiRes.status === 200) {
+            razaoSocial = brasilApiRes.data.razao_social || '';
+            const qsa = brasilApiRes.data.qsa || [];
+            const sociosList = qsa.map(s => s.qualificacao_socio ? `${s.nome_socio} (${s.qualificacao_socio})` : s.nome_socio);
+            socios = sociosList.join(', ');
+          }
+        } catch (e) {
+          // Ignora se BrasilAPI falhar
+        }
+      }
+    }
+  } catch (err) {
+    // Ignora falhas de enriquecimento de CNPJ
+  }
+  return { cnpj, razaoSocial, socios: socios || 'Não identificado' };
+}
+
+// Rota Principal de Raspagem integrando Serper.dev
 app.post('/api/scrape', authenticateToken, async (req, res) => {
   try {
     const query = req.body.query || req.body.searchTerm || req.body.term || req.body.segmento;
-    const limit = req.body.limit || 10;
-    const filters = req.body.filters || {};
+    const limit = parseInt(req.body.limit || req.body.qtd_resultados || 10);
+    const serperApiKey = process.env.SERPER_API_KEY || 'b7aa37b6091475c73a9bd6fdede31e0ab0c77df3';
 
     if (!query) {
       return res.status(400).json({ error: 'O termo de busca é obrigatório.' });
     }
 
-    // Estrutura de leads com todas as colunas necessárias para renderização e exportação Excel
-    const leadsList = Array.from({ length: Math.min(limit, 10) }).map((_, i) => ({
-      id: String(i + 1),
-      nome: `Restaurante ${query} ${i + 1}`,
-      empresa: `Restaurante ${query} ${i + 1}`,
-      name: `Restaurante ${query} ${i + 1}`,
-      telefone: `(19) 9987${i}-${i}432`,
-      phone: `(19) 9987${i}-${i}432`,
-      whatsapp: `(19) 9987${i}-${i}432`,
-      email: `contato${i + 1}@${query.toLowerCase().replace(/[^a-z0-9]/g, '')}.com.br`,
-      website: `https://www.${query.toLowerCase().replace(/[^a-z0-9]/g, '')}${i + 1}.com.br`,
-      site: `https://www.${query.toLowerCase().replace(/[^a-z0-9]/g, '')}${i + 1}.com.br`,
-      endereco: `Rua Cel. Quirino, ${100 + i * 15} - Cambuí, Campinas - SP`,
-      address: `Rua Cel. Quirino, ${100 + i * 15} - Cambuí, Campinas - SP`,
-      rede_social: `@restaurante_${query.toLowerCase().replace(/[^a-z0-9]/g, '')}_${i + 1}`,
-      instagram: `@restaurante_${query.toLowerCase().replace(/[^a-z0-9]/g, '')}_${i + 1}`,
-      redes_sociais: `@restaurante_${query.toLowerCase().replace(/[^a-z0-9]/g, '')}_${i + 1}`,
-      rating: 4.8,
-      reviews: 120 + i
-    }));
+    // Chamada à API da Serper Places
+    const serperResponse = await axios.post(
+      'https://google.serper.dev/places',
+      { q: query, gl: 'br', hl: 'pt-br' },
+      { headers: { 'X-API-KEY': serperApiKey, 'Content-Type': 'application/json' }, timeout: 12000 }
+    );
+
+    const places = serperResponse.data.places || [];
+    const leadsList = [];
+
+    for (let i = 0; i < Math.min(places.length, limit); i++) {
+      const item = places[i];
+      const companyName = item.title || '';
+      const address = item.address || item.formattedAddress || item.vicinity || '';
+      const phoneRaw = item.phoneNumber || item.phone || '';
+      const category = item.category || 'Comércio Local / Empresa';
+      const rating = item.rating || '';
+      const ratingCount = item.ratingCount || '';
+      const websiteUrl = item.website || '';
+      const lat = item.latitude;
+      const lng = item.longitude;
+
+      const gmapsLink = (lat && lng) 
+        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+        : `https://www.google.com/maps/search/${encodeURIComponent(companyName + ' ' + address)}`;
+
+      const { phone, whatsapp } = cleanAndFormatPhone(phoneRaw);
+      const { cnpj, razaoSocial, socios } = await fetchCnpjAndPartners(companyName, address, serperApiKey);
+
+      // Objeto padronizado com TODAS as variações de chaves esperadas (Frontend + Excel)
+      const leadObj = {
+        // Nomes de colunas idênticos ao app.py
+        "Prompt": query,
+        "Nome da Empresa": companyName,
+        "Razão Social": razaoSocial,
+        "CNPJ": cnpj,
+        "Sócios / Decisores": socios,
+        "Categoria": category,
+        "Endereço": address,
+        "Telefone": phone,
+        "Whatsapp": whatsapp,
+        "Email": "",
+        "Redes Sociais": "",
+        "Nota Google": rating,
+        "Total Avaliações": ratingCount,
+        "Status": "A Fazer",
+        "Progressão": "1º Contato",
+        "Tem Website": websiteUrl ? "Sim" : "Não",
+        "Link Google Maps": gmapsLink,
+        "Observações": websiteUrl ? `Site: ${websiteUrl}` : "Sem site oficial",
+
+        // Compatibilidade de chaves em inglês/minúsculas para a tabela do frontend JS
+        id: String(i + 1),
+        empresa: companyName,
+        nome: companyName,
+        name: companyName,
+        telefone: phone,
+        phone: phone,
+        whatsapp: whatsapp,
+        email: "",
+        website: websiteUrl,
+        site: websiteUrl,
+        endereco: address,
+        address: address,
+        rede_social: "",
+        redes_sociais: "",
+        instagram: "",
+        rating: rating,
+        reviews: ratingCount,
+        gmaps_link: gmapsLink
+      };
+
+      leadsList.push(leadObj);
+    }
 
     return res.status(200).json({
       success: true,
@@ -102,14 +204,14 @@ app.post('/api/scrape', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erro no processamento da busca:', error);
-    return res.status(500).json({ error: 'Falha interna ao processar raspagem de leads.' });
+    console.error('Erro ao realizar scraping via Serper:', error.message);
+    return res.status(500).json({ error: 'Falha ao buscar leads na API Serper. Verifique a chave e tente novamente.' });
   }
 });
 
 // Rota Health Check
 app.get('/', (req, res) => {
-  res.send('API SaaS Lead Scraper ativa e operando.');
+  res.send('API SaaS Lead Scraper ativa e operando com Serper.dev.');
 });
 
 // Porta Local / Serverless
