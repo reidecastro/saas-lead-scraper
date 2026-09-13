@@ -62,7 +62,10 @@ const authenticateToken = async (req, res, next) => {
 // Rota Principal de Raspagem de Leads
 app.post('/api/scrape', authenticateToken, async (req, res) => {
   try {
-    const { query, limit = 10, filters = {} } = req.body;
+    // Suporte flexível para diferentes nomes de parâmetros do frontend
+    const query = req.body.query || req.body.searchTerm || req.body.term || req.body.segmento;
+    const limit = req.body.limit || 10;
+    const filters = req.body.filters || {};
 
     if (!query) {
       return res.status(400).json({ error: 'O termo de busca é obrigatório.' });
