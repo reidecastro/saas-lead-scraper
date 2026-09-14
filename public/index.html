@@ -122,7 +122,7 @@
       <div class="flex items-center justify-between">
         <h3 class="text-lg font-bold text-white">Leads Encontrados</h3>
         <button id="btnDownloadExcel" onclick="downloadExcel()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 text-xs font-bold py-2 px-4 rounded-xl transition flex items-center gap-2">
-          <i class="fa-solid fa-file-excel"></i> Baixar Planilha Excel
+          <i class="fa-solid fa-file-excel"></i> Baixar Planilha CSV
         </button>
       </div>
 
@@ -283,55 +283,44 @@
       container.classList.remove('hidden');
     }
 
-    async function downloadExcel() {
+    function downloadExcel() {
       if (!currentLeads || currentLeads.length === 0) {
         alert("Nenhum lead disponível para exportação.");
         return;
       }
 
-      const user = firebase.auth().currentUser;
-      if (!user) {
-        alert("Sessão expirada. Faça login novamente.");
-        return;
-      }
+      // Cabeçalhos da planilha
+      const headers = ["Empresa", "Telefone", "E-mail", "Rede Social", "WhatsApp"];
 
-      const btn = document.getElementById('btnDownloadExcel');
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Gerando...`;
+      // Montagem das linhas em formato CSV (separador ;)
+      const rows = currentLeads.map(lead => {
+        const empresa = (lead.empresa || lead.nome || lead.name || '').replace(/"/g, '""');
+        const telefone = (lead.telefone || lead.phone || 'N/A').replace(/"/g, '""');
+        const email = (lead.email || lead.mail || 'N/A').replace(/"/g, '""');
+        const redeSocial = (lead.rede_social || lead.redes_sociais || lead.social || 'N/A').replace(/"/g, '""');
+        const whatsapp = lead.whatsapp ? lead.whatsapp.replace(/"/g, '""') : 'N/A';
 
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch('https://saas-lead-scraper-asa4.vercel.app/api/export-excel', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ leads: currentLeads, term: currentTerm })
-        });
+        return `"${empresa}";"${telefone}";"${email}";"${redeSocial}";"${whatsapp}"`;
+      });
 
-        if (!response.ok) {
-          throw new Error('Falha ao processar planilha no servidor.');
-        }
+      // Unindo o cabeçalho e as linhas com quebra de linha
+      const csvContent = [headers.join(';'), ...rows].join('\n');
 
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const filename = currentTerm ? `leads_${currentTerm.replace(/[^a-z0-9]/gi, '_')}.xlsx` : `leads_extraidos_${Date.now()}.xlsx`;
+      // Adicionando BOM (\uFEFF) para forçar acentuação UTF-8 correta no Excel/Calc
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      const filename = currentTerm 
+        ? `leads_${currentTerm.replace(/[^a-z0-9]/gi, '_')}.csv` 
+        : `leads_extraidos_${Date.now()}.csv`;
 
-        a.href = downloadUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-
-      } catch (err) {
-        alert("Falha no download da planilha: " + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = `<i class="fa-solid fa-file-excel"></i> Baixar Planilha Excel`;
-      }
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     }
   </script>
 </body>
